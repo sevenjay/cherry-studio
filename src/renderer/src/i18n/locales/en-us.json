@@ -687,6 +687,7 @@
       "rerank_model_tooltip": "Click the Manage button in Settings -> Model Services to add.",
       "search": "Search models...",
       "stream_output": "Stream output",
+      "tool_call": "Tool Call",
       "type": {
         "embedding": "Embedding",
         "free": "Free",

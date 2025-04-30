@@ -24,6 +24,7 @@ const AssistantModelSettings: FC<Props> = ({ assistant, updateAssistant, updateA
   const [enableMaxTokens, setEnableMaxTokens] = useState(assistant?.settings?.enableMaxTokens ?? false)
   const [maxTokens, setMaxTokens] = useState(assistant?.settings?.maxTokens ?? 0)
   const [streamOutput, setStreamOutput] = useState(assistant?.settings?.streamOutput ?? true)
+  const [toolCall, setToolCall] = useState(assistant?.settings?.toolCall ?? true)
   const [defaultModel, setDefaultModel] = useState(assistant?.defaultModel)
   const [topP, setTopP] = useState(assistant?.settings?.topP ?? 1)
   const [customParameters, setCustomParameters] = useState<AssistantSettingCustomParameters[]>(
@@ -372,6 +373,17 @@ const AssistantModelSettings: FC<Props> = ({ assistant, updateAssistant, updateA
           onChange={(checked) => {
             setStreamOutput(checked)
             updateAssistantSettings({ streamOutput: checked })
+          }}
+        />
+      </SettingRow>
+      <Divider style={{ margin: '10px 0' }} />
+      <SettingRow style={{ minHeight: 30 }}>
+        <Label>{t('models.tool_call')}</Label>
+        <Switch
+          checked={toolCall}
+          onChange={(checked) => {
+            setToolCall(checked)
+            updateAssistantSettings({ toolCall: checked })
           }}
         />
       </SettingRow>

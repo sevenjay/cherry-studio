@@ -50,7 +50,7 @@ const MessageTools: FC<Props> = ({ blocks }) => {
     const isDone = status === 'done'
     const hasError = isDone && response?.isError === true
     const result = {
-      params: tool.inputSchema,
+      params: toolResponse.arguments,
       response: toolResponse.response
     }
 

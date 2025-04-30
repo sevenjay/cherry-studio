@@ -21,10 +21,13 @@ import {
   Assistant,
   FileTypes,
   GenerateImageParams,
+  MCPCallToolResponse,
+  MCPTool,
   MCPToolResponse,
   Model,
   Provider,
   Suggestion,
+  ToolCallResponse,
   Usage,
   WebSearchSource
 } from '@renderer/types'
@@ -33,11 +36,17 @@ import { Message } from '@renderer/types/newMessage'
 import { removeSpecialCharactersForTopicName } from '@renderer/utils'
 import { addImageFileToContents } from '@renderer/utils/formats'
 import { convertLinks } from '@renderer/utils/linkConverter'
-import { mcpToolCallResponseToOpenAIMessage, parseAndCallTools } from '@renderer/utils/mcp-tools'
+import {
+  mcpToolCallResponseToOpenAIMessage,
+  mcpToolsToOpenAITools,
+  openAIToolsToMcpTool,
+  parseAndCallTools
+} from '@renderer/utils/mcp-tools'
 import { findFileBlocks, findImageBlocks, getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { buildSystemPrompt } from '@renderer/utils/prompt'
 import { isEmpty, takeRight } from 'lodash'
 import OpenAI from 'openai'
+import { ChatCompletionToolMessageParam } from 'openai/resources'
 import { ChatCompletionContentPart, ChatCompletionMessageParam } from 'openai/resources/chat/completions'
 import { Stream } from 'openai/streaming'
 import { FileLike, toFile } from 'openai/uploads'
@@ -59,6 +68,24 @@ export default class OpenAIProvider extends BaseProvider {
         ...this.defaultHeaders()
       }
     })
+  }
+
+  convertMcpTools(mcpTools: MCPTool[]) {
+    return mcpToolsToOpenAITools(mcpTools)
+  }
+
+  mcpToolCallResponseToMessage = (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => {
+    if ('toolUseId' in mcpToolResponse && mcpToolResponse.toolUseId) {
+      return mcpToolCallResponseToOpenAIMessage(mcpToolResponse.toolUseId, resp, isVisionModel(model))
+    } else if ('toolCallId' in mcpToolResponse && mcpToolResponse.toolCallId) {
+      const toolCallOut: ChatCompletionToolMessageParam = {
+        role: 'tool',
+        tool_call_id: mcpToolResponse.toolCallId,
+        content: resp.content.reduce((acc, c) => (c.type === 'text' ? acc + c.text : acc), '')
+      } satisfies ChatCompletionToolMessageParam
+      return toolCallOut
+    }
+    return
   }
 
   /**
@@ -285,8 +312,7 @@ export default class OpenAIProvider extends BaseProvider {
     }
     const defaultModel = getDefaultModel()
     const model = assistant.model || defaultModel
-    const { contextCount, maxTokens, streamOutput } = getAssistantSettings(assistant)
-
+    const { contextCount, maxTokens, streamOutput, toolCall } = getAssistantSettings(assistant)
     const isEnabledWebSearch = assistant.enableWebSearch || !!assistant.webSearchProviderId
     onChunk({ type: ChunkType.LLM_RESPONSE_CREATED })
     // 退回到 OpenAI 兼容模式
@@ -387,7 +413,7 @@ export default class OpenAIProvider extends BaseProvider {
       })
       return
     }
-    const tools: OpenAI.Responses.Tool[] = []
+    let tools: OpenAI.Responses.Tool[] = []
     if (isEnabledWebSearch) {
       tools.push({
         type: 'web_search_preview'
@@ -408,7 +434,15 @@ export default class OpenAIProvider extends BaseProvider {
       systemMessage.role = 'developer'
     }
 
-    if (mcpTools && mcpTools.length > 0) {
+    const { tools: extraTools } = this.setupToolsConfig<OpenAI.Responses.Tool>({
+      mcpTools,
+      model,
+      toolCall
+    })
+
+    tools = tools.concat(extraTools)
+
+    if (this.useSystemPromptForTools) {
       systemMessageInput.text = buildSystemPrompt(systemMessageInput.text || '', mcpTools)
     }
     systemMessageContent.push(systemMessageInput)
@@ -440,48 +474,84 @@ export default class OpenAIProvider extends BaseProvider {
 
     const toolResponses: MCPToolResponse[] = []
 
-    const processToolUses = async (content: string, idx: number) => {
-      const toolResults = await parseAndCallTools(
+    const processToolResults = async (toolResults: Awaited<ReturnType<typeof parseAndCallTools>>, idx: number) => {
+      if (toolResults.length === 0) return
+
+      toolResults.forEach((ts) => reqMessages.push(ts as OpenAI.Responses.EasyInputMessage))
+
+      onChunk({ type: ChunkType.LLM_RESPONSE_CREATED })
+      const stream = await this.sdk.responses.create(
+        {
+          model: model.id,
+          input: reqMessages,
+          temperature: this.getTemperature(assistant, model),
+          top_p: this.getTopP(assistant, model),
+          max_output_tokens: maxTokens,
+          stream: streamOutput,
+          tools: !isEmpty(tools) ? tools : undefined,
+          service_tier: this.getServiceTier(model),
+          ...this.getResponseReasoningEffort(assistant, model),
+          ...this.getCustomParameters(assistant)
+        },
+        {
+          signal,
+          timeout: this.getTimeout(model)
+        }
+      )
+      await processStream(stream, idx + 1)
+    }
+
+    const processToolCalls = async (mcpTools, toolCalls: OpenAI.Responses.ResponseFunctionToolCall[]) => {
+      const mcpToolResponses = toolCalls
+        .map((toolCall) => {
+          const mcpTool = openAIToolsToMcpTool(mcpTools, toolCall as OpenAI.Responses.ResponseFunctionToolCall)
+          if (!mcpTool) return undefined
+
+          const parsedArgs = (() => {
+            try {
+              return JSON.parse(toolCall.arguments)
+            } catch {
+              return toolCall.arguments
+            }
+          })()
+
+          return {
+            id: toolCall.call_id,
+            toolCallId: toolCall.call_id,
+            tool: mcpTool,
+            arguments: parsedArgs,
+            status: 'pending'
+          } as ToolCallResponse
+        })
+        .filter((t): t is ToolCallResponse => typeof t !== 'undefined')
+
+      return await parseAndCallTools(
+        mcpToolResponses,
+        toolResponses,
+        onChunk,
+        this.mcpToolCallResponseToMessage,
+        model,
+        mcpTools
+      )
+    }
+
+    const processToolUses = async (content: string) => {
+      return await parseAndCallTools(
         content,
         toolResponses,
         onChunk,
-        idx,
-        mcpToolCallResponseToOpenAIMessage,
-        mcpTools,
-        isVisionModel(model)
+        this.mcpToolCallResponseToMessage,
+        model,
+        mcpTools
       )
-
-      if (toolResults.length > 0) {
-        reqMessages.push({
-          role: 'assistant',
-          content: content
-        })
-        toolResults.forEach((ts) => reqMessages.push(ts as OpenAI.Responses.EasyInputMessage))
-        const newStream = await this.sdk.responses.create(
-          {
-            model: model.id,
-            input: reqMessages,
-            temperature: this.getTemperature(assistant, model),
-            top_p: this.getTopP(assistant, model),
-            max_output_tokens: maxTokens,
-            stream: true,
-            service_tier: this.getServiceTier(model),
-            ...this.getResponseReasoningEffort(assistant, model),
-            ...this.getCustomParameters(assistant)
-          },
-          {
-            signal,
-            timeout: this.getTimeout(model)
-          }
-        )
-        await processStream(newStream, idx + 1)
-      }
     }
 
     const processStream = async (
       stream: Stream<OpenAI.Responses.ResponseStreamEvent> | OpenAI.Responses.Response,
       idx: number
     ) => {
+      const toolCalls: OpenAI.Responses.ResponseFunctionToolCall[] = []
+
       if (!streamOutput) {
         const nonStream = stream as OpenAI.Responses.Response
         const time_completion_millsec = new Date().getTime() - start_time_millsec
@@ -499,11 +569,14 @@ export default class OpenAIProvider extends BaseProvider {
           prompt_tokens: nonStream.usage?.input_tokens || 0,
           total_tokens
         }
+        let content = ''
+
         for (const output of nonStream.output) {
           switch (output.type) {
             case 'message':
               if (output.content[0].type === 'output_text') {
                 onChunk({ type: ChunkType.TEXT_COMPLETE, text: output.content[0].text })
+                content += output.content[0].text
                 if (output.content[0].annotations && output.content[0].annotations.length > 0) {
                   onChunk({
                     type: ChunkType.LLM_WEB_SEARCH_COMPLETE,
@@ -522,8 +595,20 @@ export default class OpenAIProvider extends BaseProvider {
                 thinking_millsec: new Date().getTime() - start_time_millsec
               })
               break
+            case 'function_call':
+              toolCalls.push(output)
           }
         }
+
+        const toolResults: Awaited<ReturnType<typeof parseAndCallTools>> = []
+        if (toolCalls.length) {
+          toolResults.push(...(await processToolCalls(mcpTools, toolCalls)))
+        }
+        if (content.length) {
+          toolResults.push(...(await processToolUses(content)))
+        }
+        await processToolResults(toolResults, idx)
+
         onChunk({
           type: ChunkType.BLOCK_COMPLETE,
           response: {
@@ -534,6 +619,9 @@ export default class OpenAIProvider extends BaseProvider {
         return
       }
       let content = ''
+
+      let outputItems: OpenAI.Responses.ResponseOutputItem[] = []
+
       let lastUsage: Usage | undefined = undefined
       let final_time_completion_millsec_delta = 0
       for await (const chunk of stream as Stream<OpenAI.Responses.ResponseStreamEvent>) {
@@ -544,6 +632,12 @@ export default class OpenAIProvider extends BaseProvider {
           case 'response.created':
             time_first_token_millsec = new Date().getTime()
             break
+          case 'response.output_item.added':
+            if (chunk.item.type === 'function_call') {
+              outputItems.push(chunk.item)
+            }
+            break
+
           case 'response.reasoning_summary_text.delta':
             onChunk({
               type: ChunkType.THINKING_DELTA,
@@ -570,6 +664,20 @@ export default class OpenAIProvider extends BaseProvider {
               type: ChunkType.TEXT_COMPLETE,
               text: chunk.text
             })
+            break
+          case 'response.function_call_arguments.done':
+            const outputItem: OpenAI.Responses.ResponseOutputItem | undefined = outputItems.find(
+              (item) => item.id === chunk.item_id
+            )
+            if (outputItem) {
+              if (outputItem.type === 'function_call') {
+                toolCalls.push({
+                  ...outputItem,
+                  arguments: chunk.arguments
+                })
+              }
+            }
+
             break
           case 'response.content_part.done':
             if (chunk.part.type === 'output_text' && chunk.part.annotations && chunk.part.annotations.length > 0) {
@@ -609,7 +717,23 @@ export default class OpenAIProvider extends BaseProvider {
         }
       }
 
-      await processToolUses(content, idx)
+      if (content) {
+        reqMessages.push({
+          role: 'assistant',
+          content: content
+        })
+      }
+
+      let toolResults: Awaited<ReturnType<typeof parseAndCallTools>> = []
+      if (toolCalls.length) {
+        toolResults = await processToolCalls(mcpTools, toolCalls)
+      }
+      if (content) {
+        toolResults = toolResults.concat(await processToolUses(content))
+      }
+      if (toolResults.length) {
+        await processToolResults(toolResults, idx)
+      }
 
       onChunk({
         type: ChunkType.BLOCK_COMPLETE,
@@ -624,6 +748,7 @@ export default class OpenAIProvider extends BaseProvider {
       })
     }
 
+    onChunk({ type: ChunkType.LLM_RESPONSE_CREATED })
     const stream = await this.sdk.responses.create(
       {
         model: model.id,
