@@ -715,15 +715,28 @@ export default class OpenAIProvider extends BaseProvider {
             })
             break
         }
+
+        // --- End of Incremental onChunk calls ---
+      } // End of for await loop
+
+      // Construct the complete assistant message after the stream is done
+      const assistantMessage: ChatCompletionMessageParam = {
+        role: 'assistant',
+        content: toolCalls.length && !content ? null : content
       }
 
-      if (content) {
-        reqMessages.push({
-          role: 'assistant',
-          content: content
-        })
+      // Add tool_calls if present
+      if (toolCalls.length) {
+        // @ts-ignore
+        assistantMessage.tool_calls = toolCalls
       }
 
+      // Add the complete message to reqMessages
+      // @ts-ignore
+      reqMessages.push(assistantMessage)
+
+      // Call processToolUses AFTER the loop finishes processing the main stream content
+      // Note: parseAndCallTools inside processToolUses should handle its own onChunk for tool responses
       let toolResults: Awaited<ReturnType<typeof parseAndCallTools>> = []
       if (toolCalls.length) {
         toolResults = await processToolCalls(mcpTools, toolCalls)
