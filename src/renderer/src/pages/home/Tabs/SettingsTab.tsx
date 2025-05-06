@@ -70,6 +70,7 @@ const SettingsTab: FC<Props> = (props) => {
   const [maxTokens, setMaxTokens] = useState(assistant?.settings?.maxTokens ?? 0)
   const [fontSizeValue, setFontSizeValue] = useState(fontSize)
   const [streamOutput, setStreamOutput] = useState(assistant?.settings?.streamOutput ?? true)
+  const [toolCall, setToolCall] = useState(assistant?.settings?.toolCall ?? true)
   const { t } = useTranslation()
 
   const dispatch = useAppDispatch()
@@ -218,6 +219,18 @@ const SettingsTab: FC<Props> = (props) => {
             onChange={(checked) => {
               setStreamOutput(checked)
               onUpdateAssistantSettings({ streamOutput: checked })
+            }}
+          />
+        </SettingRow>
+        <SettingDivider />
+        <SettingRow>
+          <SettingRowTitleSmall>{t('models.tool_call')}</SettingRowTitleSmall>
+          <Switch
+            size="small"
+            checked={toolCall}
+            onChange={(checked) => {
+              setToolCall(checked)
+              updateAssistantSettings({ toolCall: checked })
             }}
           />
         </SettingRow>
