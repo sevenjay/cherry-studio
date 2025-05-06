@@ -529,7 +529,23 @@ export default class OpenAICompatibleProvider extends BaseOpenAiProvider {
             choice.message.tool_calls.forEach((t) => toolCalls.push(t))
           }
 
-          reqMessages.push(choice.message)
+          reqMessages.push({
+            role: choice.message.role,
+            content: choice.message.content,
+            tool_calls: toolCalls.length
+              ? toolCalls.map((toolCall) => ({
+                  id: toolCall.id,
+                  function: {
+                    ...toolCall.function,
+                    arguments:
+                      typeof toolCall.function.arguments === 'string'
+                        ? toolCall.function.arguments
+                        : JSON.stringify(toolCall.function.arguments)
+                  },
+                  type: 'function'
+                }))
+              : undefined
+          })
         })
 
         if (content.length) {
@@ -669,11 +685,20 @@ export default class OpenAICompatibleProvider extends BaseOpenAiProvider {
             break
           }
           case 'tool-calls': {
-            chunk.delta?.tool_calls.forEach((toolCall) => {
-              if (toolCall.id && toolCall.type === 'function') {
-                toolCalls.push(toolCall)
-              } else {
-                toolCalls[toolCalls.length - 1].function.arguments += toolCall.function.arguments
+            chunk.delta.tool_calls.forEach((toolCall) => {
+              const { id, index, type, function: fun } = toolCall
+              if (id && type === 'function' && fun) {
+                const { name, arguments: args } = fun
+                toolCalls.push({
+                  id,
+                  function: {
+                    name: name || '',
+                    arguments: args || ''
+                  },
+                  type: 'function'
+                })
+              } else if (fun?.arguments) {
+                toolCalls[index].function.arguments += fun.arguments
               }
             })
             break
@@ -739,12 +764,23 @@ export default class OpenAICompatibleProvider extends BaseOpenAiProvider {
                 } as LLMWebSearchCompleteChunk)
               }
             }
-            if (content.length) {
-              reqMessages.push({
-                role: 'assistant',
-                content
-              })
-            }
+            reqMessages.push({
+              role: 'assistant',
+              content: content,
+              tool_calls: toolCalls.length
+                ? toolCalls.map((toolCall) => ({
+                    id: toolCall.id,
+                    function: {
+                      ...toolCall.function,
+                      arguments:
+                        typeof toolCall.function.arguments === 'string'
+                          ? toolCall.function.arguments
+                          : JSON.stringify(toolCall.function.arguments)
+                    },
+                    type: 'function'
+                  }))
+                : undefined
+            })
             let toolResults: Awaited<ReturnType<typeof parseAndCallTools>> = []
             if (toolCalls.length) {
               toolResults = await processToolCalls(mcpTools, toolCalls)
