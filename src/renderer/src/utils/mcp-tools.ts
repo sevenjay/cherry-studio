@@ -388,75 +388,37 @@ export function parseToolUse(content: string, mcpTools: MCPTool[]): ToolUseRespo
   return tools
 }
 
-export async function parseAndCallTools(
+export async function parseAndCallTools<R>(
   tools: MCPToolResponse[],
   allToolResponses: MCPToolResponse[],
   onChunk: CompletionsParams['onChunk'],
-  convertToMessage: (
-    mcpToolResponse: MCPToolResponse,
-    resp: MCPCallToolResponse,
-    model: Model
-  ) =>
-    | ChatCompletionMessageParam
-    | MessageParam
-    | Content
-    | OpenAI.Responses.EasyInputMessage
-    | ToolResultBlockParam
-    | undefined,
+  convertToMessage: (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => R | undefined,
   model: Model,
   mcpTools?: MCPTool[]
 ): Promise<
-  (ChatCompletionMessageParam | MessageParam | Content | OpenAI.Responses.EasyInputMessage | ToolResultBlockParam)[]
+  (ChatCompletionMessageParam | MessageParam | Content | OpenAI.Responses.ResponseInputItem | ToolResultBlockParam)[]
 >
 
-export async function parseAndCallTools(
+export async function parseAndCallTools<R>(
   content: string,
   allToolResponses: MCPToolResponse[],
   onChunk: CompletionsParams['onChunk'],
-  convertToMessage: (
-    mcpToolResponse: MCPToolResponse,
-    resp: MCPCallToolResponse,
-    model: Model
-  ) =>
-    | ChatCompletionMessageParam
-    | MessageParam
-    | Content
-    | OpenAI.Responses.EasyInputMessage
-    | ToolResultBlockParam
-    | undefined,
+  convertToMessage: (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => R | undefined,
   model: Model,
   mcpTools?: MCPTool[]
 ): Promise<
-  (ChatCompletionMessageParam | MessageParam | Content | OpenAI.Responses.EasyInputMessage | ToolResultBlockParam)[]
+  (ChatCompletionMessageParam | MessageParam | Content | OpenAI.Responses.ResponseInputItem | ToolResultBlockParam)[]
 >
 
-export async function parseAndCallTools(
+export async function parseAndCallTools<R>(
   content: string | MCPToolResponse[],
   allToolResponses: MCPToolResponse[],
   onChunk: CompletionsParams['onChunk'],
-  convertToMessage: (
-    mcpToolResponse: MCPToolResponse,
-    resp: MCPCallToolResponse,
-    model: Model
-  ) =>
-    | ChatCompletionMessageParam
-    | MessageParam
-    | Content
-    | OpenAI.Responses.EasyInputMessage
-    | ToolResultBlockParam
-    | undefined,
+  convertToMessage: (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => R | undefined,
   model: Model,
   mcpTools?: MCPTool[]
-): Promise<
-  (ChatCompletionMessageParam | MessageParam | Content | OpenAI.Responses.EasyInputMessage | ToolResultBlockParam)[]
-> {
-  const toolResults: (
-    | ChatCompletionMessageParam
-    | MessageParam
-    | Content
-    | OpenAI.Responses.EasyInputMessage
-    | ToolResultBlockParam
-  )[] = []
+): Promise<R[]> {
+  const toolResults: R[] = []
   let curToolResponses: MCPToolResponse[] = []
   if (Array.isArray(content)) {
     curToolResponses = content

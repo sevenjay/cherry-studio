@@ -32,6 +32,7 @@ import {
   EFFORT_RATIO,
   FileTypes,
   MCPCallToolResponse,
+  MCPTool,
   MCPToolResponse,
   Model,
   Provider,
@@ -70,7 +71,7 @@ import {
 } from 'openai/resources'
 
 import { CompletionsParams } from '.'
-import OpenAIProvider from './OpenAIProvider'
+import { BaseOpenAiProvider } from './OpenAIProvider'
 
 // 1. 定义联合类型
 export type OpenAIStreamChunk =
@@ -78,7 +79,7 @@ export type OpenAIStreamChunk =
   | { type: 'tool-calls'; delta: any }
   | { type: 'finish'; finishReason: any; usage: any; delta: any; chunk: any }
 
-export default class OpenAICompatibleProvider extends OpenAIProvider {
+export default class OpenAICompatibleProvider extends BaseOpenAiProvider {
   constructor(provider: Provider) {
     super(provider)
 
@@ -323,11 +324,25 @@ export default class OpenAICompatibleProvider extends OpenAIProvider {
     return {}
   }
 
-  private _mcpToolCallResponseToMessage = (
-    mcpToolResponse: MCPToolResponse,
-    resp: MCPCallToolResponse,
-    model: Model
-  ) => {
+  convertMcpTools(mcpTools: MCPTool[]) {
+    return mcpTools.map(
+      (tool) =>
+        ({
+          type: 'function',
+          function: {
+            name: tool.id,
+            description: tool.description,
+            parameters: {
+              type: 'object',
+              properties: tool.inputSchema.properties,
+              required: tool.inputSchema.required
+            }
+          }
+        }) as ChatCompletionTool
+    )
+  }
+
+  mcpToolCallResponseToMessage = (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => {
     if ('toolUseId' in mcpToolResponse && mcpToolResponse.toolUseId) {
       return mcpToolCallResponseToOpenAICompatibleMessage(mcpToolResponse.toolUseId, resp, isVisionModel(model))
     } else if ('toolCallId' in mcpToolResponse && mcpToolResponse.toolCallId) {
@@ -470,7 +485,7 @@ export default class OpenAICompatibleProvider extends OpenAIProvider {
         mcpToolResponses,
         toolResponses,
         onChunk,
-        this._mcpToolCallResponseToMessage,
+        this.mcpToolCallResponseToMessage,
         model,
         mcpTools
       )
@@ -481,7 +496,7 @@ export default class OpenAICompatibleProvider extends OpenAIProvider {
         content,
         toolResponses,
         onChunk,
-        this._mcpToolCallResponseToMessage,
+        this.mcpToolCallResponseToMessage,
         model,
         mcpTools
       )
