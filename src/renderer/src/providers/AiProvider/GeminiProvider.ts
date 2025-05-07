@@ -442,7 +442,7 @@ export default class GeminiProvider extends BaseProvider {
         let content = ''
         const time_completion_millsec = new Date().getTime() - start_time_millsec
 
-        let toolResults: Awaited<ReturnType<typeof parseAndCallTools>> = []
+        const toolResults: Awaited<ReturnType<typeof parseAndCallTools>> = []
         if (stream.text?.length) {
           toolResults.push(...(await processToolUses(stream.text)))
         }

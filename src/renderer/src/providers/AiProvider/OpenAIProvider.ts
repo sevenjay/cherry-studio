@@ -51,10 +51,10 @@ import {
   ChatCompletionMessageParam,
   ChatCompletionTool
 } from 'openai/resources/chat/completions'
+import { Tool } from 'openai/resources/responses/responses'
 import { Stream } from 'openai/streaming'
 import { FileLike, toFile } from 'openai/uploads'
 
-import { Tool } from 'openai/resources/responses/responses'
 import { CompletionsParams } from '.'
 import BaseProvider from './BaseProvider'
 
@@ -633,7 +633,7 @@ export abstract class BaseOpenAiProvider extends BaseProvider {
       }
       let content = ''
 
-      let outputItems: OpenAI.Responses.ResponseOutputItem[] = []
+      const outputItems: OpenAI.Responses.ResponseOutputItem[] = []
 
       let lastUsage: Usage | undefined = undefined
       let final_time_completion_millsec_delta = 0
@@ -678,7 +678,7 @@ export abstract class BaseOpenAiProvider extends BaseProvider {
               text: chunk.text
             })
             break
-          case 'response.function_call_arguments.done':
+          case 'response.function_call_arguments.done': {
             const outputItem: OpenAI.Responses.ResponseOutputItem | undefined = outputItems.find(
               (item) => item.id === chunk.item_id
             )
@@ -692,6 +692,7 @@ export abstract class BaseOpenAiProvider extends BaseProvider {
             }
 
             break
+          }
           case 'response.content_part.done':
             if (chunk.part.type === 'output_text' && chunk.part.annotations && chunk.part.annotations.length > 0) {
               onChunk({
