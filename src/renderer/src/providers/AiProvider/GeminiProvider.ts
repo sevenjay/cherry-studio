@@ -439,6 +439,7 @@ export default class GeminiProvider extends BaseProvider {
       let functionCalls: FunctionCall[] = []
 
       if (stream instanceof GenerateContentResponse) {
+        let content = ''
         const time_completion_millsec = new Date().getTime() - start_time_millsec
 
         let toolResults: Awaited<ReturnType<typeof parseAndCallTools>> = []
@@ -446,12 +447,23 @@ export default class GeminiProvider extends BaseProvider {
           toolResults.push(...(await processToolUses(stream.text)))
         }
         stream.candidates?.forEach((candidate) => {
-          candidate.content?.parts?.forEach((part) => {
-            if (part.functionCall) {
-              functionCalls.push(part.functionCall)
-            }
-          })
+          if (candidate.content) {
+            history.push(candidate.content)
+
+            candidate.content.parts?.forEach((part) => {
+              if (part.functionCall) {
+                functionCalls.push(part.functionCall)
+              }
+              if (part.text) {
+                content += part.text
+                onChunk({ type: ChunkType.TEXT_DELTA, text: part.text })
+              }
+            })
+          }
         })
+        if (content.length) {
+          onChunk({ type: ChunkType.TEXT_COMPLETE, text: content })
+        }
         if (functionCalls.length) {
           toolResults.push(...(await processToolCalls(functionCalls)))
         }
