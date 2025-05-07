@@ -36,10 +36,15 @@ import { Message } from '@renderer/types/newMessage'
 import { removeSpecialCharactersForTopicName } from '@renderer/utils'
 import { addImageFileToContents } from '@renderer/utils/formats'
 import { convertLinks } from '@renderer/utils/linkConverter'
-import { mcpToolCallResponseToOpenAIMessage, openAIToolsToMcpTool, parseAndCallTools } from '@renderer/utils/mcp-tools'
+import {
+  filterProperties,
+  mcpToolCallResponseToOpenAIMessage,
+  openAIToolsToMcpTool,
+  parseAndCallTools
+} from '@renderer/utils/mcp-tools'
 import { findFileBlocks, findImageBlocks, getMainTextContent } from '@renderer/utils/messageUtils/find'
 import { buildSystemPrompt } from '@renderer/utils/prompt'
-import { isEmpty, pick, takeRight } from 'lodash'
+import { isEmpty, takeRight } from 'lodash'
 import OpenAI from 'openai'
 import {
   ChatCompletionContentPart,
@@ -1218,21 +1223,7 @@ export default class OpenAIProvider extends BaseOpenAiProvider {
   }
 
   convertMcpTools(mcpTools: MCPTool[]) {
-    const filterProperties = (properties: Record<string, any>) => {
-      return Object.fromEntries(
-        Object.entries(properties).map(([key, value]) => {
-          if (typeof value === 'object' && value !== null) {
-            const record = pick(value, 'enum', 'type', 'description', 'items')
-            if ('items' in record) {
-              record.items = filterProperties(record.items)
-            }
-            return [key, record]
-          }
-          return [key, value]
-        })
-      )
-    }
-
+    const schemaKeys = ['type', 'description', 'items', 'enum']
     return mcpTools.map(
       (tool) =>
         ({
@@ -1240,7 +1231,7 @@ export default class OpenAIProvider extends BaseOpenAiProvider {
           name: tool.id,
           parameters: {
             type: 'object',
-            properties: filterProperties(tool.inputSchema.properties),
+            properties: filterProperties(tool.inputSchema.properties, schemaKeys),
             required: Object.keys(tool.inputSchema.properties),
             additionalProperties: false
           },

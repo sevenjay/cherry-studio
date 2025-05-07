@@ -12,6 +12,7 @@ import { addMCPServer } from '@renderer/store/mcp'
 import { MCPCallToolResponse, MCPServer, MCPTool, MCPToolResponse, Model, ToolUseResponse } from '@renderer/types'
 import type { MCPToolCompleteChunk, MCPToolInProgressChunk } from '@renderer/types/chunk'
 import { ChunkType } from '@renderer/types/chunk'
+import { isArray, isObject, transform } from 'lodash'
 import { nanoid } from 'nanoid'
 import OpenAI from 'openai'
 import {
@@ -164,6 +165,40 @@ const MCP_AUTO_INSTALL_SERVER_NAME = '@cherry/mcp-auto-install'
 //   return processedProperties
 // }
 
+export function filterProperties(
+  properties: Record<string, any> | string | number | boolean | Array<Record<string, any> | string | number | boolean>,
+  supportedKeys: string[],
+  depth = 0
+) {
+  depth++
+  // If it is an array, recursively process each element
+  if (isArray(properties)) {
+    return properties.map((item) => filterProperties(item, supportedKeys, depth))
+  }
+
+  // If it is an object, recursively process each property
+  if (isObject(properties)) {
+    return transform(
+      properties,
+      (result, value, key) => {
+        if (depth > 1) {
+          if (key === 'properties') {
+            result[key] = filterProperties(value, supportedKeys, 0)
+          } else if (supportedKeys.includes(key)) {
+            result[key] = filterProperties(value, supportedKeys, depth)
+          }
+        } else {
+          result[key] = filterProperties(value, supportedKeys, depth)
+        }
+      },
+      {}
+    )
+  }
+
+  // Return other types directly (e.g., string, number, etc.)
+  return properties
+}
+
 export function mcpToolsToOpenAITools(mcpTools: MCPTool[]): Array<ChatCompletionTool> {
   return mcpTools.map((tool) => ({
     type: 'function',
@@ -269,7 +304,38 @@ export function anthropicToolUseToMcpTool(mcpTools: MCPTool[] | undefined, toolU
   return tool
 }
 
+/**
+ * @param mcpTools
+ * @returns
+ */
 export function mcpToolsToGeminiTools(mcpTools: MCPTool[]): Tool[] {
+  /**
+   * @typedef {import('@google/genai').Schema} Schema
+   */
+  const schemaKeys = [
+    'example',
+    'pattern',
+    'default',
+    'maxLength',
+    'minLength',
+    'minProperties',
+    'maxProperties',
+    'anyOf',
+    'description',
+    'enum',
+    'format',
+    'items',
+    'maxItems',
+    'maximum',
+    'minItems',
+    'minimum',
+    'nullable',
+    'properties',
+    'propertyOrdering',
+    'required',
+    'title',
+    'type'
+  ]
   return [
     {
       functionDeclarations: mcpTools?.map((tool) => {
@@ -278,7 +344,7 @@ export function mcpToolsToGeminiTools(mcpTools: MCPTool[]): Tool[] {
           description: tool.description,
           parameters: {
             type: GeminiSchemaType.OBJECT,
-            properties: tool.inputSchema.properties,
+            properties: filterProperties(tool.inputSchema.properties, schemaKeys),
             required: tool.inputSchema.required
           }
         }
