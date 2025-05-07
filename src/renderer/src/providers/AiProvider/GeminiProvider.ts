@@ -370,7 +370,6 @@ export default class GeminiProvider extends BaseProvider {
 
     const processToolResults = async (toolResults: Awaited<ReturnType<typeof parseAndCallTools>>, idx: number) => {
       if (toolResults.length === 0) return
-      history.push(messageContents)
       const newChat = this.sdk.chats.create({
         model: model.id,
         config: generateContentConfig,
@@ -436,6 +435,8 @@ export default class GeminiProvider extends BaseProvider {
       stream: AsyncGenerator<GenerateContentResponse> | GenerateContentResponse,
       idx: number
     ) => {
+      history.push(messageContents)
+
       let functionCalls: FunctionCall[] = []
 
       if (stream instanceof GenerateContentResponse) {
@@ -545,6 +546,11 @@ export default class GeminiProvider extends BaseProvider {
               } as LLMWebSearchCompleteChunk)
             }
             if (chunk.functionCalls) {
+              chunk.candidates?.forEach((candidate) => {
+                if (candidate.content) {
+                  history.push(candidate.content)
+                }
+              })
               functionCalls = functionCalls.concat(chunk.functionCalls)
             }
 
@@ -560,6 +566,7 @@ export default class GeminiProvider extends BaseProvider {
               }
             })
           }
+
           // --- End Incremental onChunk calls ---
 
           // Call processToolUses AFTER potentially processing text content in this chunk
