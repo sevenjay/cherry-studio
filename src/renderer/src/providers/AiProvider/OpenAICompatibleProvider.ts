@@ -325,11 +325,11 @@ export default class OpenAICompatibleProvider extends BaseOpenAiProvider {
     return {}
   }
 
-  convertMcpTools(mcpTools: MCPTool[]) {
+  public convertMcpTools(mcpTools: MCPTool[]) {
     return mcpToolsToOpenAIChatTools(mcpTools)
   }
 
-  mcpToolCallResponseToMessage = (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => {
+  public mcpToolCallResponseToMessage = (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => {
     if ('toolUseId' in mcpToolResponse && mcpToolResponse.toolUseId) {
       return mcpToolCallResponseToOpenAICompatibleMessage(mcpToolResponse, resp, isVisionModel(model))
     } else if ('toolCallId' in mcpToolResponse && mcpToolResponse.toolCallId) {

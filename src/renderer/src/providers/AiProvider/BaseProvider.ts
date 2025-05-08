@@ -5,7 +5,9 @@ import type {
   Assistant,
   GenerateImageParams,
   KnowledgeReference,
+  MCPCallToolResponse,
   MCPTool,
+  MCPToolResponse,
   Model,
   Provider,
   Suggestion,
@@ -51,8 +53,12 @@ export default abstract class BaseProvider {
   abstract generateImage(params: GenerateImageParams): Promise<string[]>
   abstract generateImageByChat({ messages, assistant, onChunk, onFilterMessages }: CompletionsParams): Promise<void>
   abstract getEmbeddingDimensions(model: Model): Promise<number>
-
-  protected abstract convertMcpTools(mcpTools: MCPTool[]): any[]
+  public abstract convertMcpTools(mcpTools: MCPTool[]): any[]
+  public abstract mcpToolCallResponseToMessage(
+    mcpToolResponse: MCPToolResponse,
+    resp: MCPCallToolResponse,
+    model: Model
+  ): any
 
   public getBaseURL(): string {
     const host = this.provider.apiHost

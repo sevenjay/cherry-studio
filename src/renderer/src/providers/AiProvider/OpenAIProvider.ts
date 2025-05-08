@@ -1223,11 +1223,11 @@ export default class OpenAIProvider extends BaseOpenAiProvider {
     super(provider)
   }
 
-  convertMcpTools(mcpTools: MCPTool[]) {
+  public convertMcpTools(mcpTools: MCPTool[]) {
     return mcpToolsToOpenAIResponseTools(mcpTools)
   }
 
-  mcpToolCallResponseToMessage = (
+  public mcpToolCallResponseToMessage = (
     mcpToolResponse: MCPToolResponse,
     resp: MCPCallToolResponse,
     model: Model

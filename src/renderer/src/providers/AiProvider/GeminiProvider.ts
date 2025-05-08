@@ -956,11 +956,11 @@ export default class GeminiProvider extends BaseProvider {
     throw new Error('Method not implemented.')
   }
 
-  convertMcpTools(mcpTools: MCPTool[]): Tool[] {
+  public convertMcpTools(mcpTools: MCPTool[]): Tool[] {
     return mcpToolsToGeminiTools(mcpTools)
   }
 
-  mcpToolCallResponseToMessage = (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => {
+  public mcpToolCallResponseToMessage = (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => {
     if ('toolUseId' in mcpToolResponse && mcpToolResponse.toolUseId) {
       return mcpToolCallResponseToGeminiMessage(mcpToolResponse, resp, isVisionModel(model))
     } else if ('toolCallId' in mcpToolResponse) {

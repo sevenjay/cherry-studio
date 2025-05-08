@@ -686,11 +686,11 @@ export default class AnthropicProvider extends BaseProvider {
     return 0
   }
 
-  convertMcpTools(mcpTools: MCPTool[]) {
+  public convertMcpTools(mcpTools: MCPTool[]) {
     return mcpToolsToAnthropicTools(mcpTools)
   }
 
-  mcpToolCallResponseToMessage = (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => {
+  public mcpToolCallResponseToMessage = (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => {
     if ('toolUseId' in mcpToolResponse && mcpToolResponse.toolUseId) {
       return mcpToolCallResponseToAnthropicMessage(mcpToolResponse, resp, model)
     } else if ('toolCallId' in mcpToolResponse) {
