@@ -53,6 +53,7 @@ import {
 } from '@renderer/utils/linkConverter'
 import {
   mcpToolCallResponseToOpenAICompatibleMessage,
+  mcpToolsToOpenAIChatTools,
   openAIToolsToMcpTool,
   parseAndCallTools
 } from '@renderer/utils/mcp-tools'
@@ -325,21 +326,7 @@ export default class OpenAICompatibleProvider extends BaseOpenAiProvider {
   }
 
   convertMcpTools(mcpTools: MCPTool[]) {
-    return mcpTools.map(
-      (tool) =>
-        ({
-          type: 'function',
-          function: {
-            name: tool.id,
-            description: tool.description,
-            parameters: {
-              type: 'object',
-              properties: tool.inputSchema.properties,
-              required: tool.inputSchema.required
-            }
-          }
-        }) as ChatCompletionTool
-    )
+    return mcpToolsToOpenAIChatTools(mcpTools)
   }
 
   mcpToolCallResponseToMessage = (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => {

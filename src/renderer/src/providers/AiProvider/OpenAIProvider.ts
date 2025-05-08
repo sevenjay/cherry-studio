@@ -37,8 +37,8 @@ import { removeSpecialCharactersForTopicName } from '@renderer/utils'
 import { addImageFileToContents } from '@renderer/utils/formats'
 import { convertLinks } from '@renderer/utils/linkConverter'
 import {
-  filterProperties,
   mcpToolCallResponseToOpenAIMessage,
+  mcpToolsToOpenAIResponseTools,
   openAIToolsToMcpTool,
   parseAndCallTools
 } from '@renderer/utils/mcp-tools'
@@ -1224,21 +1224,7 @@ export default class OpenAIProvider extends BaseOpenAiProvider {
   }
 
   convertMcpTools(mcpTools: MCPTool[]) {
-    const schemaKeys = ['type', 'description', 'items', 'enum']
-    return mcpTools.map(
-      (tool) =>
-        ({
-          type: 'function',
-          name: tool.id,
-          parameters: {
-            type: 'object',
-            properties: filterProperties(tool.inputSchema.properties, schemaKeys),
-            required: Object.keys(tool.inputSchema.properties),
-            additionalProperties: false
-          },
-          strict: true
-        }) satisfies Tool
-    )
+    return mcpToolsToOpenAIResponseTools(mcpTools)
   }
 
   mcpToolCallResponseToMessage = (

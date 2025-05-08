@@ -12,7 +12,7 @@ import { addMCPServer } from '@renderer/store/mcp'
 import { MCPCallToolResponse, MCPServer, MCPTool, MCPToolResponse, Model, ToolUseResponse } from '@renderer/types'
 import type { MCPToolCompleteChunk, MCPToolInProgressChunk } from '@renderer/types/chunk'
 import { ChunkType } from '@renderer/types/chunk'
-import { isArray, isObject, transform } from 'lodash'
+import { isArray, isObject, pull, transform } from 'lodash'
 import { nanoid } from 'nanoid'
 import OpenAI from 'openai'
 import {
@@ -25,6 +25,7 @@ import {
 import { CompletionsParams } from '../providers/AiProvider'
 
 const MCP_AUTO_INSTALL_SERVER_NAME = '@cherry/mcp-auto-install'
+const EXTRA_SCHEMA_KEYS = ['schema', 'headers']
 
 // const ensureValidSchema = (obj: Record<string, any>) => {
 //   // Filter out unsupported keys for Gemini
@@ -167,13 +168,11 @@ const MCP_AUTO_INSTALL_SERVER_NAME = '@cherry/mcp-auto-install'
 
 export function filterProperties(
   properties: Record<string, any> | string | number | boolean | Array<Record<string, any> | string | number | boolean>,
-  supportedKeys: string[],
-  depth = 0
+  supportedKeys: string[]
 ) {
-  depth++
   // If it is an array, recursively process each element
   if (isArray(properties)) {
-    return properties.map((item) => filterProperties(item, supportedKeys, depth))
+    return properties.map((item) => filterProperties(item, supportedKeys))
   }
 
   // If it is an object, recursively process each property
@@ -181,14 +180,21 @@ export function filterProperties(
     return transform(
       properties,
       (result, value, key) => {
-        if (depth > 1) {
-          if (key === 'properties') {
-            result[key] = filterProperties(value, supportedKeys, 0)
-          } else if (supportedKeys.includes(key)) {
-            result[key] = filterProperties(value, supportedKeys, depth)
+        if (key === 'properties') {
+          result[key] = transform(value, (acc, v, k) => {
+            acc[k] = filterProperties(v, supportedKeys)
+          })
+
+          result['additionalProperties'] = false
+          result['required'] = pull(Object.keys(value), ...EXTRA_SCHEMA_KEYS)
+        } else if (key === 'oneOf') {
+          // openai only supports anyOf
+          result['anyOf'] = filterProperties(value, supportedKeys)
+        } else if (supportedKeys.includes(key)) {
+          result[key] = filterProperties(value, supportedKeys)
+          if (key === 'type' && value === 'object') {
+            result['additionalProperties'] = false
           }
-        } else {
-          result[key] = filterProperties(value, supportedKeys, depth)
         }
       },
       {}
@@ -199,20 +205,40 @@ export function filterProperties(
   return properties
 }
 
-export function mcpToolsToOpenAITools(mcpTools: MCPTool[]): Array<ChatCompletionTool> {
-  return mcpTools.map((tool) => ({
-    type: 'function',
-    name: tool.id,
-    function: {
-      name: tool.id,
-      description: tool.description,
-      parameters: {
-        type: 'object',
-        properties: tool.inputSchema.properties,
-        required: tool.inputSchema.required
-      }
-    }
-  }))
+export function mcpToolsToOpenAIResponseTools(mcpTools: MCPTool[]): OpenAI.Responses.Tool[] {
+  const schemaKeys = ['type', 'description', 'items', 'enum', 'additionalProperties', 'anyof']
+  return mcpTools.map(
+    (tool) =>
+      ({
+        type: 'function',
+        name: tool.id,
+        parameters: {
+          type: 'object',
+          properties: filterProperties(tool.inputSchema, schemaKeys).properties,
+          required: pull(Object.keys(tool.inputSchema.properties), ...EXTRA_SCHEMA_KEYS),
+          additionalProperties: false
+        },
+        strict: true
+      }) satisfies OpenAI.Responses.Tool
+  )
+}
+
+export function mcpToolsToOpenAIChatTools(mcpTools: MCPTool[]): Array<ChatCompletionTool> {
+  return mcpTools.map(
+    (tool) =>
+      ({
+        type: 'function',
+        function: {
+          name: tool.id,
+          description: tool.description,
+          parameters: {
+            type: 'object',
+            properties: tool.inputSchema.properties,
+            required: tool.inputSchema.required
+          }
+        }
+      }) as ChatCompletionTool
+  )
 }
 
 export function openAIToolsToMcpTool(
@@ -344,7 +370,7 @@ export function mcpToolsToGeminiTools(mcpTools: MCPTool[]): Tool[] {
           description: tool.description,
           parameters: {
             type: GeminiSchemaType.OBJECT,
-            properties: filterProperties(tool.inputSchema.properties, schemaKeys),
+            properties: filterProperties(tool.inputSchema, schemaKeys).properties,
             required: tool.inputSchema.required
           }
         }
