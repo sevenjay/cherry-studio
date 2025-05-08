@@ -26,6 +26,9 @@ import type OpenAI from 'openai'
 import type { CompletionsParams } from '.'
 
 export default abstract class BaseProvider {
+  // Threshold for determining whether to use system prompt for tools
+  private static readonly SYSTEM_PROMPT_THRESHOLD: number = 128
+
   protected provider: Provider
   protected host: string
   protected apiKey: string
@@ -262,7 +265,7 @@ export default abstract class BaseProvider {
     }
 
     // Condition 3: Use system prompt if tools length exceeds 128
-    if (mcpTools && mcpTools.length > 128) {
+    if (mcpTools && mcpTools.length > BaseProvider.SYSTEM_PROMPT_THRESHOLD) {
       this.useSystemPromptForTools = true
       tools = []
     }
