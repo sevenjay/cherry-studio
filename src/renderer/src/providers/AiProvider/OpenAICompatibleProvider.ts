@@ -344,7 +344,7 @@ export default class OpenAICompatibleProvider extends BaseOpenAiProvider {
 
   mcpToolCallResponseToMessage = (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => {
     if ('toolUseId' in mcpToolResponse && mcpToolResponse.toolUseId) {
-      return mcpToolCallResponseToOpenAICompatibleMessage(mcpToolResponse.toolUseId, resp, isVisionModel(model))
+      return mcpToolCallResponseToOpenAICompatibleMessage(mcpToolResponse, resp, isVisionModel(model))
     } else if ('toolCallId' in mcpToolResponse && mcpToolResponse.toolCallId) {
       const toolCallOut: ChatCompletionToolMessageParam = {
         role: 'tool',

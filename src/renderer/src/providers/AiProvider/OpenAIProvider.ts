@@ -1247,7 +1247,7 @@ export default class OpenAIProvider extends BaseOpenAiProvider {
     model: Model
   ): OpenAI.Responses.ResponseInputItem | undefined => {
     if ('toolUseId' in mcpToolResponse && mcpToolResponse.toolUseId) {
-      return mcpToolCallResponseToOpenAIMessage(mcpToolResponse.toolUseId, resp, isVisionModel(model))
+      return mcpToolCallResponseToOpenAIMessage(mcpToolResponse, resp, isVisionModel(model))
     } else if ('toolCallId' in mcpToolResponse && mcpToolResponse.toolCallId) {
       const toolCallOut: OpenAI.Responses.ResponseInputItem = {
         type: 'function_call_output',

@@ -962,7 +962,7 @@ export default class GeminiProvider extends BaseProvider {
 
   mcpToolCallResponseToMessage = (mcpToolResponse: MCPToolResponse, resp: MCPCallToolResponse, model: Model) => {
     if ('toolUseId' in mcpToolResponse && mcpToolResponse.toolUseId) {
-      return mcpToolCallResponseToGeminiMessage(mcpToolResponse.toolUseId, resp, isVisionModel(model))
+      return mcpToolCallResponseToGeminiMessage(mcpToolResponse, resp, isVisionModel(model))
     } else if ('toolCallId' in mcpToolResponse) {
       const toolCallOut = {
         role: 'user',
